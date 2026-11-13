@@ -45,6 +45,14 @@ router.post("/", requireRol("admin_copropiedad", "contador", "superadmin"), asyn
     return res.status(400).json({ error: "inmueble_id y valor son obligatorios" });
   }
 
+  const inmCheck = await query(
+    "SELECT id FROM inmueble WHERE id = $1 AND condominio_id = $2",
+    [inmueble_id, condominioId]
+  );
+  if (!inmCheck.rows[0]) {
+    return res.status(404).json({ error: "El inmueble no existe o no pertenece a esta copropiedad" });
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
