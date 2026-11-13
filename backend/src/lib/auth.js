@@ -37,7 +37,22 @@ export function condominioDeLaPeticion(req) {
   return req.user.condominio_id;
 }
 
-export function requireRol(...roles) {
+export function esRolAdministrativo(req) {
+  return ["superadmin", "admin_copropiedad", "contador"].includes(req.user.rol);
+}
+
+export function filtroInmueblePorUsuario(req, alias = "i") {
+  if (esRolAdministrativo(req)) {
+    return `${alias}.condominio_id = $1`;
+  }
+
+  if (!req.user.persona_id) {
+    return "1=0";
+  }
+  return `${alias}.condominio_id = $1 AND (${alias}.propietario_id = $2 OR ${alias}.residente_id = $2)`;
+}
+
+export function requireRol(...roles) {  
   return (req, res, next) => {
     if (!roles.includes(req.user.rol)) {
       return res.status(403).json({ error: "No autorizado para esta acción" });

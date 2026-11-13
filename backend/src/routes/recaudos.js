@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { query, pool } from "../lib/db.js";
-import { authRequired, condominioDeLaPeticion, requireRol } from "../lib/auth.js";
+import { authRequired, condominioDeLaPeticion, filtroInmueblePorUsuario, requireRol } from "../lib/auth.js";
 import { estadoPorSaldo } from "../lib/finance.js";
 
 const router = Router();
@@ -13,9 +13,11 @@ router.get("/", async (req, res) => {
     `SELECT p.id, p.fecha, p.medio, p.valor, p.no_aplicado, p.anulado,
             i.identificacion
        FROM pago p JOIN inmueble i ON i.id = p.inmueble_id
-      WHERE p.condominio_id = $1
+      WHERE p.condominio_id = $1 AND ${filtroInmueblePorUsuario(req)}
       ORDER BY p.fecha DESC, p.id DESC`,
-    [condominioId]
+    ["superadmin", "admin_copropiedad", "contador"].includes(req.user.rol)
+      ? [condominioId]
+      : [condominioId, req.user.persona_id]
   );
   res.json({ recaudos: rows });
 });
@@ -30,9 +32,13 @@ router.get("/derrame", async (req, res) => {
        JOIN pago p ON p.id = pa.pago_id
        JOIN factura f ON f.id = pa.factura_id
        JOIN inmueble i ON i.id = p.inmueble_id
-      WHERE p.condominio_id = $1 AND p.anulado = FALSE
+      WHERE p.condominio_id = $1
+        AND f.condominio_id = p.condominio_id
+        AND ${filtroInmueblePorUsuario(req)} AND p.anulado = FALSE
       ORDER BY p.fecha DESC, p.id DESC`,
-    [condominioId]
+    ["superadmin", "admin_copropiedad", "contador"].includes(req.user.rol)
+      ? [condominioId]
+      : [condominioId, req.user.persona_id]
   );
   res.json({ derrame: rows });
 });
@@ -48,6 +54,15 @@ router.post("/", requireRol("admin_copropiedad", "contador", "superadmin"), asyn
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const inmueble = await client.query(
+      `SELECT id FROM inmueble
+        WHERE id = $1 AND condominio_id = $2`,
+      [inmueble_id, condominioId]
+    );
+    if (!inmueble.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Inmueble no encontrado" });
+    }
 
     const pago = await client.query(
       `INSERT INTO pago (condominio_id, inmueble_id, fecha, medio, valor)
@@ -60,9 +75,9 @@ router.post("/", requireRol("admin_copropiedad", "contador", "superadmin"), asyn
     const facturas = await client.query(
       `SELECT id, total, saldo, estado
          FROM factura
-        WHERE inmueble_id = $1 AND saldo > 0 AND estado <> 'Anulada'
+        WHERE inmueble_id = $1 AND condominio_id = $2 AND saldo > 0 AND estado <> 'Anulada'
         ORDER BY fecha_vencimiento DESC`,
-      [inmueble_id]
+      [inmueble_id, condominioId]
     );
 
     let restante = Number(valor);

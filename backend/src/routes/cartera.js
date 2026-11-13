@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { query } from "../lib/db.js";
-import { authRequired, condominioDeLaPeticion } from "../lib/auth.js";
+import { authRequired, condominioDeLaPeticion, esRolAdministrativo, filtroInmueblePorUsuario } from "../lib/auth.js";
 import { diasEntre, estaEnMora } from "../lib/finance.js";
 
 const router = Router();
@@ -15,11 +15,15 @@ router.get("/", async (req, res) => {
             COUNT(f.id) FILTER (WHERE f.saldo > 0) AS facturas_pendientes
        FROM inmueble i
        LEFT JOIN persona p ON p.id = i.propietario_id
-       LEFT JOIN factura f ON f.inmueble_id = i.id AND f.estado <> 'Anulada' AND f.saldo > 0
-      WHERE i.condominio_id = $1
+       LEFT JOIN factura f ON f.inmueble_id = i.id
+                           AND f.condominio_id = i.condominio_id
+                           AND f.estado <> 'Anulada' AND f.saldo > 0
+      WHERE ${filtroInmueblePorUsuario(req)}
       GROUP BY i.id, i.identificacion, p.nombres
       ORDER BY saldo_total DESC`,
-    [condominioId]
+    esRolAdministrativo(req)
+      ? [condominioId]
+      : [condominioId, req.user.persona_id]
   );
   const total = rows.reduce((a, r) => a + Number(r.saldo_total), 0);
   res.json({ cartera_total: total, inmuebles: rows });
@@ -31,8 +35,11 @@ router.get("/edades", async (req, res) => {
   const { rows } = await query(
     `SELECT f.saldo, f.fecha_vencimiento
        FROM factura f
-      WHERE f.condominio_id = $1 AND f.estado <> 'Anulada' AND f.saldo > 0`,
-    [condominioId]
+       JOIN inmueble i ON i.id = f.inmueble_id
+      WHERE f.condominio_id = $1 AND ${filtroInmueblePorUsuario(req)} AND f.estado <> 'Anulada' AND f.saldo > 0`,
+    esRolAdministrativo(req)
+      ? [condominioId]
+      : [condominioId, req.user.persona_id]
   );
 
   const hoy = new Date();
@@ -56,9 +63,11 @@ router.get("/mora", async (req, res) => {
   const { rows } = await query(
     `SELECT f.id, f.inmueble_id, i.identificacion, f.periodo,
             f.fecha_vencimiento, f.saldo
-       FROM factura f JOIN inmueble i ON i.id = f.inmueble_id
-      WHERE f.condominio_id = $1 AND f.estado <> 'Anulada' AND f.saldo > 0`,
-    [condominioId]
+      FROM factura f JOIN inmueble i ON i.id = f.inmueble_id
+      WHERE f.condominio_id = $1 AND ${filtroInmueblePorUsuario(req)} AND f.estado <> 'Anulada' AND f.saldo > 0`,
+    esRolAdministrativo(req)
+      ? [condominioId]
+      : [condominioId, req.user.persona_id]
   );
 
   const enMora = rows.filter((f) => estaEnMora(f.fecha_vencimiento));

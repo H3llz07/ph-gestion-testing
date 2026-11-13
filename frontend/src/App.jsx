@@ -11,6 +11,7 @@ import Reportes from "./pages/Reportes.jsx";
 
 function Shell({ children }) {
   const user = getUser();
+  const esAdministrativo = ["superadmin", "admin_copropiedad", "contador"].includes(user?.rol);
   const navigate = useNavigate();
   const salir = () => { logout(); navigate("/login"); };
   return (
@@ -19,12 +20,12 @@ function Shell({ children }) {
         <h1>PH Gestión</h1>
         <p className="sub">Propiedad horizontal</p>
         <nav>
-          <NavLink to="/" end>Dashboard</NavLink>
+          {esAdministrativo && <NavLink to="/" end>Dashboard</NavLink>}
           <NavLink to="/inmuebles">Inmuebles</NavLink>
           <NavLink to="/cartera">Cartera</NavLink>
-          <NavLink to="/facturacion">Facturación</NavLink>
-          <NavLink to="/recaudos">Recaudos</NavLink>
-          <NavLink to="/reportes">Reportes</NavLink>
+          {esAdministrativo && <NavLink to="/facturacion">Facturación</NavLink>}
+          {esAdministrativo && <NavLink to="/recaudos">Recaudos</NavLink>}
+          {esAdministrativo && <NavLink to="/reportes">Reportes</NavLink>}
         </nav>
         <div className="logout">
           <div className="sub" style={{ marginBottom: 8 }}>{user?.nombres}</div>
@@ -41,17 +42,25 @@ function Private({ children }) {
   return <Shell>{children}</Shell>;
 }
 
+function Administrative({ children }) {
+  const user = getUser();
+  if (!["superadmin", "admin_copropiedad", "contador"].includes(user?.rol)) {
+    return <Navigate to="/inmuebles" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Private><Dashboard /></Private>} />
+      <Route path="/" element={<Private><Administrative><Dashboard /></Administrative></Private>} />
       <Route path="/inmuebles" element={<Private><Inmuebles /></Private>} />
       <Route path="/inmuebles/:id/estado-cuenta" element={<Private><EstadoCuenta /></Private>} />
       <Route path="/cartera" element={<Private><Cartera /></Private>} />
-      <Route path="/facturacion" element={<Private><Facturacion /></Private>} />
-      <Route path="/recaudos" element={<Private><Recaudos /></Private>} />
-      <Route path="/reportes" element={<Private><Reportes /></Private>} />
+      <Route path="/facturacion" element={<Private><Administrative><Facturacion /></Administrative></Private>} />
+      <Route path="/recaudos" element={<Private><Administrative><Recaudos /></Administrative></Private>} />
+      <Route path="/reportes" element={<Private><Administrative><Reportes /></Administrative></Private>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

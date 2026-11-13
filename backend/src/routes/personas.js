@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { query } from "../lib/db.js";
-import { authRequired, condominioDeLaPeticion } from "../lib/auth.js";
+import { authRequired, condominioDeLaPeticion, esRolAdministrativo, requireRol } from "../lib/auth.js";
 
 const router = Router();
 router.use(authRequired);
@@ -8,6 +8,14 @@ router.use(authRequired);
 // Listado de personas (propietarios, residentes, contactos).
 router.get("/", async (req, res) => {
   const condominioId = condominioDeLaPeticion(req);
+  if (!esRolAdministrativo(req)) {
+    const { rows } = await query(
+      `SELECT id, tipo_persona, nombres, documento, email, telefono
+         FROM persona WHERE id = $1 AND condominio_id = $2`,
+      [req.user.persona_id, condominioId]
+    );
+    return res.json({ personas: rows });
+  }
   const { rows } = await query(
     `SELECT id, tipo_persona, nombres, documento, email, telefono
        FROM persona WHERE condominio_id = $1 ORDER BY nombres`,
@@ -17,7 +25,7 @@ router.get("/", async (req, res) => {
 });
 
 // Analítica del censo.
-router.get("/censo", async (req, res) => {
+router.get("/censo", requireRol("admin_copropiedad", "contador", "superadmin"), async (req, res) => {
   const condominioId = condominioDeLaPeticion(req);
   const prop = await query(
     `SELECT COUNT(DISTINCT propietario_id)::int AS n FROM inmueble
@@ -42,7 +50,7 @@ router.get("/censo", async (req, res) => {
 });
 
 // Contactos por inmueble.
-router.get("/contactos", async (req, res) => {
+router.get("/contactos", requireRol("admin_copropiedad", "contador", "superadmin"), async (req, res) => {
   const condominioId = condominioDeLaPeticion(req);
   const { rows } = await query(
     `SELECT i.identificacion,

@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { query } from "../lib/db.js";
-import { authRequired, condominioDeLaPeticion } from "../lib/auth.js";
+import { authRequired, condominioDeLaPeticion, requireRol } from "../lib/auth.js";
 
 const router = Router();
 router.use(authRequired);
 
-router.get("/", async (req, res) => {
+router.get("/", requireRol("admin_copropiedad", "contador", "superadmin"), async (req, res) => {
   const condominioId = condominioDeLaPeticion(req);
 
   // Periodo de análisis (por defecto, el más reciente facturado).
