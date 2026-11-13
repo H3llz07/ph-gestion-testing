@@ -3,6 +3,7 @@ import { api, money } from "../api.js";
 
 export default function Recaudos() {
   const [recaudos, setRecaudos] = useState([]);
+  const [inmuebles, setInmuebles] = useState([]);
   const [inmuebleId, setInmuebleId] = useState("");
   const [valor, setValor] = useState("");
   const [medio, setMedio] = useState("Transferencia");
@@ -10,7 +11,10 @@ export default function Recaudos() {
   const [err, setErr] = useState("");
 
   const cargar = async () => {
-    try { setRecaudos((await api("/api/recaudos")).recaudos); } catch (e) { setErr(e.message); }
+    try {
+      setRecaudos((await api("/api/recaudos")).recaudos);
+      const inm = await api("/api/inmuebles?limit=100"); setInmuebles(inm.inmuebles || []);
+    } catch (e) { setErr(e.message); }
   };
   useEffect(() => { cargar(); }, []);
 
@@ -41,7 +45,17 @@ export default function Recaudos() {
       <div className="panel">
         <h3>Registrar recaudo</h3>
         <form className="row" onSubmit={registrar}>
-          <div className="field"><label>ID inmueble</label><input value={inmuebleId} onChange={(e) => setInmuebleId(e.target.value)} placeholder="ej. 4" /></div>
+          <div className="field">
+            <label>Inmueble</label>
+            <select value={inmuebleId} onChange={(e) => setInmuebleId(e.target.value)}>
+              <option value="">Seleccione un inmueble...</option>
+              {inmuebles.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.identificacion} {i.tipo ? `(${i.tipo})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="field"><label>Valor</label><input value={valor} onChange={(e) => setValor(e.target.value)} placeholder="ej. 250000" /></div>
           <div className="field"><label>Medio</label>
             <select value={medio} onChange={(e) => setMedio(e.target.value)}>
