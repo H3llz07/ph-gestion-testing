@@ -20,7 +20,7 @@ export default function Dashboard() {
   if (!data) return <p>Cargando...</p>;
 
   // Total de ingresos facturados del periodo (suma de los conceptos).
-  const totalIngresos = data.ingresos_por_concepto.reduce((acc, c) => acc + c.valor, 0);
+  const totalIngresos = data.ingresos_por_concepto.reduce((acc, c) => acc + Number(c.valor || 0), 0);
 
   return (
     <>
@@ -51,7 +51,7 @@ export default function Dashboard() {
         </div>
         <div className="kpi">
           <div className="label">Total ingresos del periodo</div>
-          <div className="value">{"$ " + totalIngresos}</div>
+          <div className="value">{money(totalIngresos)}</div>
         </div>
       </div>
 
