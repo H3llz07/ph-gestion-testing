@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { query, pool } from "../lib/db.js";
-import { authRequired, condominioDeLaPeticion, requireRol } from "../lib/auth.js";
+import { authRequired, condominioDeLaPeticion, esRolAdministrativo, requireRol } from "../lib/auth.js";
 
 const router = Router();
 router.use(authRequired);
@@ -21,9 +21,13 @@ router.get("/", async (req, res) => {
                     f.fecha_emision, f.fecha_vencimiento, f.total, f.saldo, f.estado
                FROM factura f JOIN inmueble i ON i.id = f.inmueble_id
               WHERE f.condominio_id = $1`;
+  if (!esRolAdministrativo(req)) {
+    params.push(req.user.persona_id);
+    sql += " AND (i.propietario_id = $2 OR i.residente_id = $2)";
+  }
   if (periodo) {
     params.push(periodo);
-    sql += ` AND f.periodo = $2`;
+    sql += ` AND f.periodo = $${params.length}`;
   }
   sql += " ORDER BY i.identificacion, f.periodo";
   const { rows } = await query(sql, params);

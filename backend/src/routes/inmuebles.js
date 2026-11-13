@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { query } from "../lib/db.js";
-import { authRequired, condominioDeLaPeticion } from "../lib/auth.js";
+import { authRequired, condominioDeLaPeticion, esRolAdministrativo, filtroInmueblePorUsuario } from "../lib/auth.js";
 import { diasEntre, calcularInteresMora } from "../lib/finance.js";
 
 const router = Router();
@@ -12,6 +12,13 @@ router.get("/", async (req, res) => {
   const page = Math.max(1, Number(req.query.page || 1));
   const limit = Number(req.query.limit || 10);
   const offset = (page - 1) * limit;
+  const params = [condominioId];
+  if (!esRolAdministrativo(req)) {
+    params.push(req.user.persona_id);
+  }
+  const limitParam = params.length + 1;
+  const offsetParam = params.length + 2;
+  params.push(limit, offset);
 
   const { rows } = await query(
     `SELECT i.id, i.identificacion, i.torre, i.piso, i.tipo, i.area,
@@ -20,26 +27,38 @@ router.get("/", async (req, res) => {
        FROM inmueble i
        LEFT JOIN persona p ON p.id = i.propietario_id
        LEFT JOIN persona r ON r.id = i.residente_id
-      WHERE i.condominio_id = $1
-      ORDER BY i.id
-      LIMIT $2 OFFSET $3`,
-    [condominioId, limit, offset]
+       WHERE ${filtroInmueblePorUsuario(req)}
+       ORDER BY i.id
+       LIMIT $${limitParam} OFFSET $${offsetParam}`,
+    params
   );
 
-  const total = await query("SELECT COUNT(*)::int AS n FROM inmueble WHERE condominio_id = $1", [condominioId]);
+  const totalParams = [condominioId];
+  let totalWhere = "condominio_id = $1";
+  if (!esRolAdministrativo(req)) {
+    totalWhere += " AND (propietario_id = $2 OR residente_id = $2)";
+    totalParams.push(req.user.persona_id);
+  }
+  const total = await query(`SELECT COUNT(*)::int AS n FROM inmueble WHERE ${totalWhere}`, totalParams);
   res.json({ page, limit, total: total.rows[0].n, inmuebles: rows });
 });
 
 // Detalle de un inmueble.
 router.get("/:id", async (req, res) => {
   const condominioId = condominioDeLaPeticion(req);
+  const detailParams = [req.params.id, condominioId];
+  let detailScope = "i.id = $1 AND i.condominio_id = $2";
+  if (!esRolAdministrativo(req)) {
+    detailScope += " AND (i.propietario_id = $3 OR i.residente_id = $3)";
+    detailParams.push(req.user.persona_id);
+  }
   const { rows } = await query(
     `SELECT i.*, p.nombres AS propietario, r.nombres AS residente
        FROM inmueble i
        LEFT JOIN persona p ON p.id = i.propietario_id
        LEFT JOIN persona r ON r.id = i.residente_id
-      WHERE i.id = $1 AND i.condominio_id = $2`,
-    [req.params.id, condominioId]
+      WHERE ${detailScope}`,
+    detailParams
   );
   if (!rows[0]) return res.status(404).json({ error: "Inmueble no encontrado" });
   res.json(rows[0]);
@@ -48,12 +67,18 @@ router.get("/:id", async (req, res) => {
 // Estado de cuenta de un inmueble (facturas con saldo + interés de mora).
 router.get("/:id/estado-cuenta", async (req, res) => {
   const inmuebleId = Number(req.params.id);
+  const scopeParams = [inmuebleId, condominioDeLaPeticion(req)];
+  let scope = "i.id = $1 AND i.condominio_id = $2";
+  if (!esRolAdministrativo(req)) {
+    scope += " AND (i.propietario_id = $3 OR i.residente_id = $3)";
+    scopeParams.push(req.user.persona_id);
+  }
 
   const inm = await query(
     `SELECT i.*, c.tasa_mora_mensual, c.dias_gracia
        FROM inmueble i JOIN condominio c ON c.id = i.condominio_id
-      WHERE i.id = $1`,
-    [inmuebleId]
+      WHERE ${scope}`,
+    scopeParams
   );
   if (!inm.rows[0]) return res.status(404).json({ error: "Inmueble no encontrado" });
   const tasa = inm.rows[0].tasa_mora_mensual;

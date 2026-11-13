@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { query } from "../lib/db.js";
-import { authRequired, condominioDeLaPeticion } from "../lib/auth.js";
+import { authRequired, condominioDeLaPeticion, requireRol } from "../lib/auth.js";
 
 const router = Router();
 router.use(authRequired);
 
 // Totales de facturación por periodo.
-router.get("/totales-facturacion", async (req, res) => {
+router.get("/totales-facturacion", requireRol("admin_copropiedad", "contador", "superadmin"), async (req, res) => {
   const condominioId = condominioDeLaPeticion(req);
   const { rows } = await query(
     `SELECT periodo,
@@ -22,7 +22,7 @@ router.get("/totales-facturacion", async (req, res) => {
 });
 
 // Totales de recaudo por periodo (mes del pago).
-router.get("/totales-recaudo", async (req, res) => {
+router.get("/totales-recaudo", requireRol("admin_copropiedad", "contador", "superadmin"), async (req, res) => {
   const condominioId = condominioDeLaPeticion(req);
   const { rows } = await query(
     `SELECT to_char(fecha,'YYYY-MM') AS periodo,
@@ -37,7 +37,7 @@ router.get("/totales-recaudo", async (req, res) => {
 });
 
 // Balance por concepto (lo facturado por cada concepto).
-router.get("/balance-concepto", async (req, res) => {
+router.get("/balance-concepto", requireRol("admin_copropiedad", "contador", "superadmin"), async (req, res) => {
   const condominioId = condominioDeLaPeticion(req);
   const { rows } = await query(
     `SELECT c.nombre AS concepto, SUM(d.valor)::numeric AS total
@@ -53,7 +53,7 @@ router.get("/balance-concepto", async (req, res) => {
 });
 
 // Valores mensuales: facturado vs recaudado.
-router.get("/valores-mensuales", async (req, res) => {
+router.get("/valores-mensuales", requireRol("admin_copropiedad", "contador", "superadmin"), async (req, res) => {
   const condominioId = condominioDeLaPeticion(req);
   const fact = await query(
     `SELECT periodo, SUM(total)::numeric AS facturado
