@@ -29,10 +29,10 @@ export function authRequired(req, res, next) {
 }
 
 // Copropiedad sobre la que opera la petición.
-// El superadmin puede indicar ?condominio_id=; los demás usan el suyo.
+// El superadmin puede indicar ?condominio_id=; los demás usan el suyo (por defecto 1 para superadmin).
 export function condominioDeLaPeticion(req) {
-  if (req.user.rol === "superadmin" && req.query.condominio_id) {
-    return Number(req.query.condominio_id);
+  if (req.user.rol === "superadmin") {
+    return req.query.condominio_id ? Number(req.query.condominio_id) : 1;
   }
   return req.user.condominio_id;
 }
